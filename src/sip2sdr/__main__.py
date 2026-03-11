@@ -50,6 +50,7 @@ def main() -> None:
         gain_amp=cfg.sdr.gain_amp,
         initial_channels=[e.default_channel for e in cfg.sip.extensions],
         buffers=buffers,
+        squelch_threshold_db=cfg.sdr.squelch_threshold_db,
     )
 
     def _make_retune(idx: int) -> Callable[[int], None]:
