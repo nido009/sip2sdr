@@ -1,0 +1,214 @@
+"""PJSUA2 SIP account manager for SIP2SDR.
+
+Creates one SIP account per configured extension, registers with the
+Asterisk PBX, and wires incoming calls to the audio bridge.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+
+import pjsua2 as pj
+
+from sip2sdr.audio.ring_buffer import RingBuffer
+from sip2sdr.channels import ChannelMode
+from sip2sdr.config import ExtensionConfig, SipConfig
+from sip2sdr.sip.call_handler import ChannelSwitchHandler
+from sip2sdr.sip.media_port import RingBufferMediaPort
+
+logger = logging.getLogger(__name__)
+
+_SAMPLES_PER_FRAME = 160  # 20 ms at 8000 Hz
+
+
+class _Sip2SdrCall(pj.Call):
+    """A single active SIP call with audio streaming and DTMF handling."""
+
+    def __init__(
+        self,
+        account: pj.Account,
+        buf: RingBuffer,
+        retune_fn: Callable[[int], None],
+        mode: ChannelMode,
+        default_channel: int,
+        call_id: int = pj.PJSUA_INVALID_ID,
+    ) -> None:
+        super().__init__(account, call_id)
+        self._buf = buf
+        self._port: RingBufferMediaPort | None = None
+        self._handler = ChannelSwitchHandler(
+            mode=mode,
+            retune_fn=retune_fn,
+            announce_fn=self._announce,
+        )
+        self._default_channel = default_channel
+
+    def onCallState(self, prm: pj.OnCallStateParam) -> None:  # type: ignore[override]
+        """Handle call state transitions.
+
+        Args:
+            prm: PJSUA2 call state parameters.
+        """
+        info = self.getInfo()
+        logger.info("Call state: %s", info.stateText)
+        if info.state == pj.PJSIP_INV_STATE_CONFIRMED:
+            self._start_audio()
+        elif info.state == pj.PJSIP_INV_STATE_DISCONNECTED:
+            self._stop_audio()
+
+    def onDtmfDigit(self, prm: pj.OnDtmfDigitParam) -> None:  # type: ignore[override]
+        """Handle an incoming DTMF digit.
+
+        Args:
+            prm: PJSUA2 DTMF digit parameters.
+        """
+        logger.debug("DTMF: %s", prm.digit)
+        self._handler.on_dtmf(prm.digit)
+
+    def _start_audio(self) -> None:
+        self._port = RingBufferMediaPort(
+            buf=self._buf,
+            sample_rate=8000,
+            samples_per_frame=_SAMPLES_PER_FRAME,
+        )
+        aud_med = self.getAudioMedia(-1)
+        self._port.startTransmit(aud_med)
+        logger.info("Audio streaming started")
+
+    def _stop_audio(self) -> None:
+        if self._port is not None:
+            self._port.stopTransmit(self.getAudioMedia(-1))
+            self._port = None
+        logger.info("Audio streaming stopped")
+
+    def _announce(self, text: str) -> None:
+        logger.info("Announcement: %s", text)
+        # TODO: inject TTS audio into the ring buffer.
+
+
+class _Sip2SdrAccount(pj.Account):
+    """A registered SIP account that auto-answers calls."""
+
+    def __init__(
+        self,
+        buf: RingBuffer,
+        retune_fn: Callable[[int], None],
+        mode: ChannelMode,
+        default_channel: int,
+    ) -> None:
+        super().__init__()
+        self._buf = buf
+        self._retune_fn = retune_fn
+        self._mode = mode
+        self._default_channel = default_channel
+        self._active_call: _Sip2SdrCall | None = None
+
+    def onIncomingCall(self, prm: pj.OnIncomingCallParam) -> None:  # type: ignore[override]
+        """Auto-answer an incoming call and start audio streaming.
+
+        Args:
+            prm: PJSUA2 incoming call parameters.
+        """
+        logger.info("Incoming call (id=%d)", prm.callId)
+        call = _Sip2SdrCall(
+            account=self,
+            buf=self._buf,
+            retune_fn=self._retune_fn,
+            mode=self._mode,
+            default_channel=self._default_channel,
+            call_id=prm.callId,
+        )
+        self._active_call = call
+        answer_prm = pj.CallOpParam()
+        answer_prm.statusCode = pj.PJSIP_SC_OK
+        call.answer(answer_prm)
+
+
+class SipEngine:
+    """Manages PJSUA2 library lifecycle and SIP accounts.
+
+    Args:
+        sip_config: SIP configuration (registrar, transport, extensions).
+        buffers: One ring buffer per extension.
+        retune_fns: One retune callable per extension.
+        mode: Operating mode for DTMF channel validation.
+    """
+
+    def __init__(
+        self,
+        sip_config: SipConfig,
+        buffers: list[RingBuffer],
+        retune_fns: list[Callable[[int], None]],
+        mode: ChannelMode = ChannelMode.MARINE,
+    ) -> None:
+        self._sip_config = sip_config
+        self._buffers = buffers
+        self._retune_fns = retune_fns
+        self._mode = mode
+        self._accounts: list[_Sip2SdrAccount] = []
+        self._ep: pj.Endpoint | None = None
+
+    @property
+    def num_extensions(self) -> int:
+        """Number of SIP extensions configured."""
+        return len(self._sip_config.extensions)
+
+    def start(self) -> None:
+        """Initialise PJSUA2, create TLS transport, and register accounts."""
+        self._ep = pj.Endpoint()
+        self._ep.libCreate()
+
+        ep_cfg = pj.EpConfig()
+        ep_cfg.logConfig.level = 4
+        self._ep.libInit(ep_cfg)
+
+        tp_cfg = pj.TransportConfig()
+        tp_cfg.port = 5061
+        self._ep.transportCreate(pj.PJSIP_TRANSPORT_TLS, tp_cfg)
+
+        self._ep.libStart()
+
+        for ext, buf, retune_fn in zip(
+            self._sip_config.extensions, self._buffers, self._retune_fns, strict=True
+        ):
+            self._register_account(ext, buf, retune_fn)
+
+    def stop(self) -> None:
+        """Unregister accounts and shut down PJSUA2."""
+        for acc in self._accounts:
+            acc.delete()
+        self._accounts.clear()
+        if self._ep is not None:
+            self._ep.libDestroy()
+            self._ep = None
+
+    def _register_account(
+        self,
+        ext: ExtensionConfig,
+        buf: RingBuffer,
+        retune_fn: Callable[[int], None],
+    ) -> None:
+        acc = _Sip2SdrAccount(
+            buf=buf,
+            retune_fn=retune_fn,
+            mode=self._mode,
+            default_channel=ext.default_channel,
+        )
+        cfg = pj.AccountConfig()
+        cfg.idUri = f"sip:{ext.username}@{self._sip_config.registrar.lstrip('sip:')}"
+        cfg.regConfig.registrarUri = self._sip_config.registrar
+        cred = pj.AuthCredInfo("digest", "*", ext.username, 0, ext.password)
+        cfg.sipConfig.authCreds.append(cred)
+
+        if not self._sip_config.verify_certs:
+            cfg.sipConfig.tlsConfig.verifyServer = False
+            cfg.sipConfig.tlsConfig.verifyClient = False
+
+        if self._sip_config.srtp == "required":
+            cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_MANDATORY
+        cfg.mediaConfig.srtpSecureSignaling = 0
+
+        acc.create(cfg)
+        self._accounts.append(acc)
+        logger.info("Registered SIP account: %s", ext.username)
