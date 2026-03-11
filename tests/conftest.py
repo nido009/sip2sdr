@@ -4,7 +4,7 @@ import pytest
 
 
 @pytest.fixture
-def marine_config_dict() -> dict:
+def marine_config_dict() -> dict[str, object]:
     """Minimal valid marine mode config dict."""
     return {
         "mode": "marine",
@@ -33,7 +33,7 @@ def marine_config_dict() -> dict:
 
 
 @pytest.fixture
-def test_config_dict() -> dict:
+def test_config_dict() -> dict[str, object]:
     """Minimal valid test/LPD mode config dict."""
     return {
         "mode": "test",

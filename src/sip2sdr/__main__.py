@@ -1,7 +1,9 @@
 """CLI entry point for sip2sdr."""
 
 import argparse
-import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -16,8 +18,8 @@ def main() -> None:
         help="Use LPD433 test band instead of Marine VHF",
     )
     args = parser.parse_args()
-    print(f"SIP2SDR starting with config={args.config}, test_mode={args.test_mode}")
-    sys.exit(0)
+    logging.basicConfig(level=logging.INFO)
+    logger.info("SIP2SDR starting with config=%s, test_mode=%s", args.config, args.test_mode)
 
 
 if __name__ == "__main__":
