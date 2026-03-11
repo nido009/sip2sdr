@@ -5,11 +5,11 @@
 
 ## Summary
 
-Add automatic squelch to each NFM demodulator chain using GNU Radio's `analog.standard_squelch_ff` block. When no carrier is present, the squelch outputs silence (zeros) so callers hear nothing instead of demodulator noise.
+Add automatic squelch to each NFM demodulator chain using GNU Radio's `analog.pwr_squelch_ff` block. When no carrier is present, the squelch outputs silence (zeros) so callers hear nothing instead of demodulator noise.
 
 ## Architecture
 
-Insert `analog.standard_squelch_ff` between the NFM demodulator and the resampler in each `DemodChain`:
+Insert `analog.pwr_squelch_ff` between the NFM demodulator and the resampler in each `DemodChain`:
 
 ```
 freq_xlat → nfm → squelch → resamp → ring_buffer_sink
@@ -41,7 +41,7 @@ Default: `-20 dB`. Typical tuning:
 
 ### `src/sip2sdr/sdr/demod_chain.py`
 - Add `squelch_threshold_db: float = -20.0` parameter to `DemodChain.__init__`
-- Instantiate `analog.standard_squelch_ff(threshold, False)` after `_nfm`
+- Instantiate `analog.pwr_squelch_ff(threshold, False)` after `_nfm`
 - Connect `_nfm → _squelch → _resamp` (was `_nfm → _resamp`)
 - Add `squelch_block` property
 - Add `set_squelch_threshold(db: float)` method

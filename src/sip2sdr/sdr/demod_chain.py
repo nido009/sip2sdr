@@ -3,8 +3,9 @@
 Each chain consists of:
 1. Frequency-translating FIR filter — selects one channel from the wideband IQ
 2. NFM demodulator — demodulates narrowband FM
-3. Rational resampler — converts to 8000 Hz
-4. Ring buffer sink — writes PCM samples for the SIP layer to consume
+3. Power squelch — gates audio to silence when no carrier is present
+4. Rational resampler — converts to 8000 Hz
+5. Ring buffer sink — writes PCM samples for the SIP layer to consume
 
 The chain is designed to be embedded in a GNU Radio top block; it does
 not own its own flowgraph.
