@@ -58,6 +58,9 @@ class DemodChain:
         channel_bandwidth: One-sided bandwidth of the channel filter (Hz).
             Typically 12500 for 25 kHz channel spacing.
         buf: Ring buffer to write decoded 8kHz PCM samples into.
+        squelch_threshold_db: Squelch threshold in dB (default -20.0).
+            More negative opens squelch on weaker signals. Uses FM noise
+            signature detection (analog.standard_squelch_ff).
     """
 
     def __init__(
@@ -66,6 +69,7 @@ class DemodChain:
         sdr_sample_rate: int,
         channel_bandwidth: int,
         buf: RingBuffer,
+        squelch_threshold_db: float = -20.0,
     ) -> None:
         self._center_freq_offset = center_freq_offset
         self._sdr_sample_rate = sdr_sample_rate
@@ -100,6 +104,8 @@ class DemodChain:
             tau=75e-6,
         )
 
+        self._squelch = analog.standard_squelch_ff(squelch_threshold_db, False)
+
         g = gcd(channel_rate, _OUTPUT_RATE)
         interp = _OUTPUT_RATE // g
         decim = channel_rate // g
@@ -131,6 +137,11 @@ class DemodChain:
         return self._nfm
 
     @property
+    def squelch_block(self) -> analog.standard_squelch_ff:
+        """The squelch block (for flowgraph connection and threshold adjustment)."""
+        return self._squelch
+
+    @property
     def resamp_block(self) -> grfilter.rational_resampler_fff:
         """The rational resampler block."""
         return self._resamp
@@ -144,3 +155,12 @@ class DemodChain:
         self._center_freq_offset = new_offset
         self._xlat.set_center_freq(new_offset)
         logger.info("Retuned demod chain to offset %.3f kHz", new_offset / 1e3)
+
+    def set_squelch_threshold(self, threshold_db: float) -> None:
+        """Update the squelch threshold without stopping the flowgraph.
+
+        Args:
+            threshold_db: New threshold in dB. More negative = more sensitive.
+        """
+        self._squelch.set_threshold(threshold_db)
+        logger.debug("Squelch threshold set to %.1f dB", threshold_db)
