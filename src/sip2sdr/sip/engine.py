@@ -192,6 +192,9 @@ class SipEngine:
 
         tp_cfg = pj.TransportConfig()
         tp_cfg.port = 5061
+        if not self._sip_config.verify_certs:
+            tp_cfg.tlsConfig.verifyServer = False
+            tp_cfg.tlsConfig.verifyClient = False
         self._ep.transportCreate(pj.PJSIP_TRANSPORT_TLS, tp_cfg)
 
         self._ep.libStart()
@@ -205,7 +208,7 @@ class SipEngine:
     def stop(self) -> None:
         """Unregister accounts and shut down PJSUA2."""
         for acc in self._accounts:
-            acc.delete()
+            acc.shutdown()
         self._accounts.clear()
         if self._ep is not None:
             self._ep.libDestroy()
@@ -242,13 +245,13 @@ class SipEngine:
         )
         cfg = pj.AccountConfig()
         cfg.idUri = f"sip:{ext.username}@{self._sip_config.registrar.removeprefix('sip:')}"
-        cfg.regConfig.registrarUri = self._sip_config.registrar
+        # Append ;transport=tls so PJSUA2 uses the TLS transport for registration
+        registrar = self._sip_config.registrar
+        if not registrar.endswith(";transport=tls"):
+            registrar += ";transport=tls"
+        cfg.regConfig.registrarUri = registrar
         cred = pj.AuthCredInfo("digest", "*", ext.username, 0, ext.password)
         cfg.sipConfig.authCreds.append(cred)
-
-        if not self._sip_config.verify_certs:
-            cfg.sipConfig.tlsConfig.verifyServer = False
-            cfg.sipConfig.tlsConfig.verifyClient = False
 
         if self._sip_config.srtp == "required":
             cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_MANDATORY

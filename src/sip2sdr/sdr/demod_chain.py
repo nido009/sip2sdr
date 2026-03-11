@@ -24,7 +24,8 @@ from sip2sdr.audio.ring_buffer import RingBuffer
 
 logger = logging.getLogger(__name__)
 
-_OUTPUT_RATE = 8_000  # Hz — PCMU sample rate
+_OUTPUT_RATE = 8_000   # Hz — PCMU sample rate
+_CHANNEL_RATE = 50_000  # Hz — intermediate rate after freq_xlat decimation
 
 
 class _RingBufferSink(gr.sync_block):
@@ -70,6 +71,11 @@ class DemodChain:
         self._sdr_sample_rate = sdr_sample_rate
         self._buf = buf
 
+        # Decimate in the freq_xlating filter to reach a manageable channel rate.
+        # _CHANNEL_RATE must divide evenly into sdr_sample_rate.
+        xlat_decim = sdr_sample_rate // _CHANNEL_RATE
+        channel_rate = sdr_sample_rate // xlat_decim
+
         taps = firdes.low_pass(
             gain=1.0,
             sampling_freq=sdr_sample_rate,
@@ -77,7 +83,7 @@ class DemodChain:
             transition_width=channel_bandwidth * 0.5,
         )
         self._xlat = grfilter.freq_xlating_fir_filter_ccc(
-            decimation=1,
+            decimation=xlat_decim,
             taps=taps,
             center_freq=center_freq_offset,
             sampling_freq=sdr_sample_rate,
@@ -85,7 +91,7 @@ class DemodChain:
 
         fm_deviation = channel_bandwidth
         self._nfm = analog.fm_demod_cf(
-            channel_rate=sdr_sample_rate,
+            channel_rate=channel_rate,
             audio_decim=1,
             deviation=fm_deviation,
             audio_pass=3_000,
@@ -94,9 +100,9 @@ class DemodChain:
             tau=75e-6,
         )
 
-        g = gcd(sdr_sample_rate, _OUTPUT_RATE)
+        g = gcd(channel_rate, _OUTPUT_RATE)
         interp = _OUTPUT_RATE // g
-        decim = sdr_sample_rate // g
+        decim = channel_rate // g
         self._resamp = grfilter.rational_resampler_fff(
             interpolation=interp,
             decimation=decim,
