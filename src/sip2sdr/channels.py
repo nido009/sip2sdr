@@ -14,9 +14,12 @@ class ChannelMode(Enum):
     TEST = "test"
 
 
-# ITU Marine VHF channel plan — subset of commonly used channels.
-# Full plan: channels 1-88, with some gaps and duplex pairs.
-# Frequencies given in MHz for the simplex / ship transmit frequency.
+# ITU Marine VHF channel plan for receive-only simplex listening.
+# Channels 1-28 and 60-88 are the standard simplex working channels.
+# Channels 29-59 are international duplex pairs (different ship/coast frequencies)
+# that are excluded here since SIP2SDR is receive-only and uses the ship-side
+# simplex receive frequency; these channels are not used in German/Baltic waters.
+# Frequencies given in MHz.
 _MARINE_CHANNELS: dict[int, float] = {
     1: 156.050,
     2: 156.100,

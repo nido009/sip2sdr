@@ -196,7 +196,7 @@ class SipEngine:
             default_channel=ext.default_channel,
         )
         cfg = pj.AccountConfig()
-        cfg.idUri = f"sip:{ext.username}@{self._sip_config.registrar.lstrip('sip:')}"
+        cfg.idUri = f"sip:{ext.username}@{self._sip_config.registrar.removeprefix('sip:')}"
         cfg.regConfig.registrarUri = self._sip_config.registrar
         cred = pj.AuthCredInfo("digest", "*", ext.username, 0, ext.password)
         cfg.sipConfig.authCreds.append(cred)

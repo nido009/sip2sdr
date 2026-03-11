@@ -6,11 +6,12 @@ import argparse
 import logging
 import signal
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from sip2sdr.audio.ring_buffer import RingBuffer
 from sip2sdr.audio.tts import TtsEngine
-from sip2sdr.channels import ChannelMode
+from sip2sdr.channels import get_channel_table
 from sip2sdr.config import load_config
 from sip2sdr.sdr.flowgraph import SdrFlowgraph
 from sip2sdr.sip.engine import SipEngine
@@ -38,7 +39,7 @@ def main() -> None:
 
     tts_cache = Path("/tmp/sip2sdr_tts")  # noqa: S108
     tts = TtsEngine(cache_dir=tts_cache)
-    tts.prewarm(channels=list(range(1, 89 if cfg.mode == ChannelMode.MARINE else 70)))
+    tts.prewarm(channels=list(get_channel_table(cfg.mode).keys()))
 
     fg = SdrFlowgraph(
         mode=cfg.mode,
@@ -51,7 +52,7 @@ def main() -> None:
         buffers=buffers,
     )
 
-    def _make_retune(idx: int):  # noqa: ANN202
+    def _make_retune(idx: int) -> Callable[[int], None]:
         return lambda ch: fg.retune(idx, ch)
 
     retune_fns = [_make_retune(i) for i in range(n)]
