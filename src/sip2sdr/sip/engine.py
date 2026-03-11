@@ -12,14 +12,17 @@ from collections.abc import Callable
 import pjsua2 as pj
 
 from sip2sdr.audio.ring_buffer import RingBuffer
+from sip2sdr.audio.tts import TtsEngine
 from sip2sdr.channels import ChannelMode
+from sip2sdr.codec import Codec
 from sip2sdr.config import ExtensionConfig, SipConfig
 from sip2sdr.sip.call_handler import ChannelSwitchHandler
 from sip2sdr.sip.media_port import RingBufferMediaPort
 
 logger = logging.getLogger(__name__)
 
-_SAMPLES_PER_FRAME = 160  # 20 ms at 8000 Hz
+_SAMPLES_PER_FRAME = 160    # 20 ms at 8000 Hz
+_TTS_BUF_CAPACITY  = 16_000  # 2 s at 8000 Hz — enough for any announcement
 
 
 class _Sip2SdrCall(pj.Call):
@@ -28,14 +31,17 @@ class _Sip2SdrCall(pj.Call):
     def __init__(
         self,
         account: pj.Account,
-        buf: RingBuffer,
+        sdr_buf: RingBuffer,
+        tts: TtsEngine,
         retune_fn: Callable[[int], None],
         mode: ChannelMode,
         default_channel: int,
         call_id: int = pj.PJSUA_INVALID_ID,
     ) -> None:
         super().__init__(account, call_id)
-        self._buf = buf
+        self._sdr_buf = sdr_buf
+        self._tts = tts
+        self._tts_buf = RingBuffer(capacity=_TTS_BUF_CAPACITY)
         self._port: RingBufferMediaPort | None = None
         self._handler = ChannelSwitchHandler(
             mode=mode,
@@ -68,12 +74,14 @@ class _Sip2SdrCall(pj.Call):
 
     def _start_audio(self) -> None:
         self._port = RingBufferMediaPort(
-            buf=self._buf,
+            sdr_buf=self._sdr_buf,
+            tts_buf=self._tts_buf,
             sample_rate=8000,
             samples_per_frame=_SAMPLES_PER_FRAME,
         )
         aud_med = self.getAudioMedia(-1)
         self._port.startTransmit(aud_med)
+        self._announce(f"Channel {self._default_channel}")
         logger.info("Audio streaming started")
 
     def _stop_audio(self) -> None:
@@ -83,8 +91,14 @@ class _Sip2SdrCall(pj.Call):
         logger.info("Audio streaming stopped")
 
     def _announce(self, text: str) -> None:
+        """Generate TTS for *text* and write it into the TTS priority buffer.
+
+        Args:
+            text: Announcement text, e.g. ``"Channel 67"`` or ``"Invalid channel"``.
+        """
         logger.info("Announcement: %s", text)
-        # TODO: inject TTS audio into the ring buffer.
+        pcm = self._tts.generate(text)
+        self._tts_buf.write(pcm)
 
 
 class _Sip2SdrAccount(pj.Account):
@@ -92,13 +106,15 @@ class _Sip2SdrAccount(pj.Account):
 
     def __init__(
         self,
-        buf: RingBuffer,
+        sdr_buf: RingBuffer,
+        tts: TtsEngine,
         retune_fn: Callable[[int], None],
         mode: ChannelMode,
         default_channel: int,
     ) -> None:
         super().__init__()
-        self._buf = buf
+        self._sdr_buf = sdr_buf
+        self._tts = tts
         self._retune_fn = retune_fn
         self._mode = mode
         self._default_channel = default_channel
@@ -113,7 +129,8 @@ class _Sip2SdrAccount(pj.Account):
         logger.info("Incoming call (id=%d)", prm.callId)
         call = _Sip2SdrCall(
             account=self,
-            buf=self._buf,
+            sdr_buf=self._sdr_buf,
+            tts=self._tts,
             retune_fn=self._retune_fn,
             mode=self._mode,
             default_channel=self._default_channel,
@@ -130,8 +147,10 @@ class SipEngine:
 
     Args:
         sip_config: SIP configuration (registrar, transport, extensions).
-        buffers: One ring buffer per extension.
+        buffers: One SDR ring buffer per extension.
         retune_fns: One retune callable per extension.
+        tts: TTS engine used to generate channel announcements.
+        codec: Audio codec to negotiate with the PBX (PCMU or PCMA).
         mode: Operating mode for DTMF channel validation.
     """
 
@@ -140,11 +159,15 @@ class SipEngine:
         sip_config: SipConfig,
         buffers: list[RingBuffer],
         retune_fns: list[Callable[[int], None]],
+        tts: TtsEngine,
+        codec: Codec = Codec.PCMU,
         mode: ChannelMode = ChannelMode.MARINE,
     ) -> None:
         self._sip_config = sip_config
         self._buffers = buffers
         self._retune_fns = retune_fns
+        self._tts = tts
+        self._codec = codec
         self._mode = mode
         self._accounts: list[_Sip2SdrAccount] = []
         self._ep: pj.Endpoint | None = None
@@ -155,7 +178,7 @@ class SipEngine:
         return len(self._sip_config.extensions)
 
     def start(self) -> None:
-        """Initialise PJSUA2, create TLS transport, and register accounts."""
+        """Initialise PJSUA2, configure codecs, create TLS transport, register accounts."""
         self._ep = pj.Endpoint()
         self._ep.libCreate()
 
@@ -168,6 +191,7 @@ class SipEngine:
         self._ep.transportCreate(pj.PJSIP_TRANSPORT_TLS, tp_cfg)
 
         self._ep.libStart()
+        self._configure_codecs()
 
         for ext, buf, retune_fn in zip(
             self._sip_config.extensions, self._buffers, self._retune_fns, strict=True
@@ -183,6 +207,22 @@ class SipEngine:
             self._ep.libDestroy()
             self._ep = None
 
+    def _configure_codecs(self) -> None:
+        """Set PJSUA2 endpoint codec priorities based on configured codec.
+
+        The preferred codec is raised to priority 255; the other G.711
+        variant is lowered to 0 so the PBX negotiates the correct one.
+        """
+        assert self._ep is not None
+        if self._codec == Codec.PCMA:
+            self._ep.codecSetPriority("PCMA/8000", 255)
+            self._ep.codecSetPriority("PCMU/8000", 0)
+            logger.info("Codec priority: PCMA preferred")
+        else:
+            self._ep.codecSetPriority("PCMU/8000", 255)
+            self._ep.codecSetPriority("PCMA/8000", 0)
+            logger.info("Codec priority: PCMU preferred")
+
     def _register_account(
         self,
         ext: ExtensionConfig,
@@ -190,7 +230,8 @@ class SipEngine:
         retune_fn: Callable[[int], None],
     ) -> None:
         acc = _Sip2SdrAccount(
-            buf=buf,
+            sdr_buf=buf,
+            tts=self._tts,
             retune_fn=retune_fn,
             mode=self._mode,
             default_channel=ext.default_channel,

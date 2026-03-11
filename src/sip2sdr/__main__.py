@@ -61,6 +61,8 @@ def main() -> None:
         sip_config=cfg.sip,
         buffers=buffers,
         retune_fns=retune_fns,
+        tts=tts,
+        codec=cfg.audio.codec,
         mode=cfg.mode,
     )
 

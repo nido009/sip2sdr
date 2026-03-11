@@ -27,12 +27,12 @@ class TestSipEngine:
         cfg = self._make_sip_config()
         buffers = [MagicMock(), MagicMock()]
         retune_fns = [MagicMock(), MagicMock()]
-        engine = SipEngine(sip_config=cfg, buffers=buffers, retune_fns=retune_fns)
+        engine = SipEngine(sip_config=cfg, buffers=buffers, retune_fns=retune_fns, tts=MagicMock())
         assert engine is not None
 
     def test_extension_count_matches_config(self) -> None:
         cfg = self._make_sip_config()
         buffers = [MagicMock(), MagicMock()]
         retune_fns = [MagicMock(), MagicMock()]
-        engine = SipEngine(sip_config=cfg, buffers=buffers, retune_fns=retune_fns)
+        engine = SipEngine(sip_config=cfg, buffers=buffers, retune_fns=retune_fns, tts=MagicMock())
         assert engine.num_extensions == 2
