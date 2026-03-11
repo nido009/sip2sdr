@@ -24,6 +24,7 @@ class SdrConfig:
     gain_lna: int
     gain_vga: int
     gain_amp: bool
+    squelch_threshold_db: float = -20.0
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ def load_config(path: Path) -> Config:
         gain_lna=int(sdr_raw["gain_lna"]),
         gain_vga=int(sdr_raw["gain_vga"]),
         gain_amp=bool(sdr_raw["gain_amp"]),
+        squelch_threshold_db=float(sdr_raw.get("squelch_threshold_db", -20.0)),
     )
 
     sip_raw = raw["sip"]

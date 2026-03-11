@@ -65,6 +65,19 @@ class TestLoadConfig:
         assert cfg.audio.sample_rate == 8000
         assert cfg.audio.buffer_size == 4000
 
+    def test_sdr_squelch_threshold_default(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.sdr.squelch_threshold_db == pytest.approx(-20.0)
+
+    def test_sdr_squelch_threshold_custom(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        marine_config_dict["sdr"]["squelch_threshold_db"] = -30.0
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.sdr.squelch_threshold_db == pytest.approx(-30.0)
+
 
 class TestCodecConfig:
     def test_pcmu_parsed(self, tmp_path: Path, marine_config_dict: dict) -> None:
