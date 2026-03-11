@@ -64,3 +64,27 @@ class TestLoadConfig:
         cfg = load_config(cfg_file)
         assert cfg.audio.sample_rate == 8000
         assert cfg.audio.buffer_size == 4000
+
+
+class TestCodecConfig:
+    def test_pcmu_parsed(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        from sip2sdr.codec import Codec
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.audio.codec == Codec.PCMU
+
+    def test_pcma_parsed(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        from sip2sdr.codec import Codec
+        marine_config_dict["audio"]["codec"] = "pcma"
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.audio.codec == Codec.PCMA
+
+    def test_invalid_codec_raises(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        marine_config_dict["audio"]["codec"] = "g722"
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        with pytest.raises(ValueError, match="Unknown codec"):
+            load_config(cfg_file)

@@ -27,6 +27,6 @@ sip:
       default_channel: 67
 
 audio:
-  codec: pcmu
+  codec: pcmu  # or "pcma" for G.711 A-law
   sample_rate: 8000
   buffer_size: 4000  # samples (~0.5s)

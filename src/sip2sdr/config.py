@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from sip2sdr.channels import ChannelMode
+from sip2sdr.codec import Codec
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class SipConfig:
 class AudioConfig:
     """Audio pipeline configuration."""
 
-    codec: str
+    codec: Codec
     sample_rate: int
     buffer_size: int
 
@@ -69,7 +70,7 @@ def load_config(path: Path) -> Config:
 
     Raises:
         FileNotFoundError: if the file does not exist.
-        ValueError: if the mode field is unrecognised.
+        ValueError: if the mode or codec field is unrecognised.
         KeyError: if a required field is missing.
     """
     if not path.exists():
@@ -113,8 +114,15 @@ def load_config(path: Path) -> Config:
     )
 
     audio_raw = raw["audio"]
+    codec_str: str = audio_raw["codec"]
+    if codec_str == "pcmu":
+        codec = Codec.PCMU
+    elif codec_str == "pcma":
+        codec = Codec.PCMA
+    else:
+        raise ValueError(f"Unknown codec: {codec_str!r} (expected 'pcmu' or 'pcma')")
     audio = AudioConfig(
-        codec=audio_raw["codec"],
+        codec=codec,
         sample_rate=int(audio_raw["sample_rate"]),
         buffer_size=int(audio_raw["buffer_size"]),
     )
