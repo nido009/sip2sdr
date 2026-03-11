@@ -39,6 +39,8 @@ class SdrFlowgraph(gr.top_block):
         gain_amp: Enable RF amplifier.
         initial_channels: List of 4 channel numbers to tune at startup.
         buffers: List of 4 RingBuffer instances (one per chain).
+        squelch_threshold_db: Squelch threshold in dB (default -20.0).
+            More negative opens squelch on weaker signals.
     """
 
     def __init__(
@@ -51,6 +53,7 @@ class SdrFlowgraph(gr.top_block):
         gain_amp: bool,
         initial_channels: list[int],
         buffers: list[RingBuffer],
+        squelch_threshold_db: float = -20.0,
     ) -> None:
         super().__init__("SIP2SDR Flowgraph")
 
@@ -77,11 +80,13 @@ class SdrFlowgraph(gr.top_block):
                 sdr_sample_rate=sample_rate,
                 channel_bandwidth=_CHANNEL_BW,
                 buf=buf,
+                squelch_threshold_db=squelch_threshold_db,
             )
             self._chains.append(chain)
             self.connect(self._src, chain.xlat_block)
             self.connect(chain.xlat_block, chain.nfm_block)
-            self.connect(chain.nfm_block, chain.resamp_block)
+            self.connect(chain.nfm_block, chain.squelch_block)
+            self.connect(chain.squelch_block, chain.resamp_block)
             self.connect(chain.resamp_block, chain.sink_block)
             logger.info("Chain %d: channel %d (%.3f MHz)", i, ch, freq / 1e6)
 

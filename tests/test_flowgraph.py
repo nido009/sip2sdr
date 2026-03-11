@@ -38,6 +38,28 @@ class TestSdrFlowgraph:
         )
         assert fg is not None
 
+    def test_chains_have_squelch_block(self) -> None:
+        """Each chain's squelch block is not None after flowgraph construction."""
+        osmosdr = pytest.importorskip("osmosdr")  # noqa: F841
+        from sip2sdr.audio.ring_buffer import RingBuffer
+        from sip2sdr.channels import ChannelMode
+        from sip2sdr.sdr.flowgraph import SdrFlowgraph
+
+        buffers = [RingBuffer(4000) for _ in range(4)]
+        fg = SdrFlowgraph(
+            mode=ChannelMode.TEST,
+            sdr_device_args="hackrf=0",
+            sample_rate=2_000_000,
+            gain_lna=32,
+            gain_vga=30,
+            gain_amp=False,
+            initial_channels=[1, 2, 3, 4],
+            buffers=buffers,
+            squelch_threshold_db=-20.0,
+        )
+        for chain in fg.chains:
+            assert chain.squelch_block is not None
+
     def test_retune_channel(self) -> None:
         buffers = [RingBuffer(4000) for _ in range(4)]
         fg = SdrFlowgraph(
