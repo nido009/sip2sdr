@@ -1,8 +1,9 @@
 """GNU Radio wideband flowgraph for SIP2SDR.
 
-Instantiates the HackRF source and up to 4 NFM demodulator chains,
-connects them within a single top block, and provides a ``retune``
-method for live channel switching.
+Instantiates the HackRF source and up to 4 NFM demodulator chains
+(xlat → NFM → squelch → resamp → ring buffer), connects them within a
+single top block, and provides a ``retune`` method for live channel
+switching.
 """
 
 from __future__ import annotations
