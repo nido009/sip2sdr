@@ -59,8 +59,8 @@ class DemodChain:
             Typically 12500 for 25 kHz channel spacing.
         buf: Ring buffer to write decoded 8kHz PCM samples into.
         squelch_threshold_db: Squelch threshold in dB (default -20.0).
-            More negative opens squelch on weaker signals. Uses FM noise
-            signature detection (analog.standard_squelch_ff).
+            More negative opens squelch on weaker signals. Uses power-based
+            squelch detection (analog.pwr_squelch_ff).
     """
 
     def __init__(
@@ -104,7 +104,7 @@ class DemodChain:
             tau=75e-6,
         )
 
-        self._squelch = analog.standard_squelch_ff(squelch_threshold_db, False)
+        self._squelch = analog.pwr_squelch_ff(squelch_threshold_db)
 
         g = gcd(channel_rate, _OUTPUT_RATE)
         interp = _OUTPUT_RATE // g
@@ -137,7 +137,7 @@ class DemodChain:
         return self._nfm
 
     @property
-    def squelch_block(self) -> analog.standard_squelch_ff:
+    def squelch_block(self) -> analog.pwr_squelch_ff:
         """The squelch block (for flowgraph connection and threshold adjustment)."""
         return self._squelch
 

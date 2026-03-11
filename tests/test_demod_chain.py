@@ -53,7 +53,7 @@ class TestDemodChain:
             squelch_threshold_db=-20.0,
         )
         assert chain.squelch_block is not None
-        assert isinstance(chain.squelch_block, analog.standard_squelch_ff)
+        assert isinstance(chain.squelch_block, analog.pwr_squelch_ff)
 
     def test_squelch_default_threshold(self) -> None:
         buf = RingBuffer(capacity=4000)
