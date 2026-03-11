@@ -86,7 +86,11 @@ class _Sip2SdrCall(pj.Call):
 
     def _stop_audio(self) -> None:
         if self._port is not None:
-            self._port.stopTransmit(self.getAudioMedia(-1))
+            try:
+                self._port.stopTransmit(self.getAudioMedia(-1))
+            except pj.Error:
+                # Media may already be invalid in DISCONNECTED state
+                logger.debug("Media already torn down during _stop_audio")
             self._port = None
         logger.info("Audio streaming stopped")
 
