@@ -198,6 +198,9 @@ class SipEngine:
         self._ep.transportCreate(pj.PJSIP_TRANSPORT_TLS, tp_cfg)
 
         self._ep.libStart()
+        # Use null audio device — the server has no sound card; all audio goes
+        # through our custom RingBufferMediaPort connected to the conference bridge.
+        self._ep.audDevManager().setNullDev()
         self._configure_codecs()
 
         for ext, buf, retune_fn in zip(

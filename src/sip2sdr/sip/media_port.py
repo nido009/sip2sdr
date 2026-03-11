@@ -89,7 +89,9 @@ try:
                 frame: PJSUA2 MediaFrame to fill with audio data.
             """
             samples = _read_frame(self._sdr_buf, self._tts_buf, self._samples_per_frame)
-            frame.buf = samples.tobytes()
+            raw = samples.tobytes()
+            frame.buf.resize(len(raw))
+            frame.buf[:] = list(raw)
 
         def getFrame(self) -> bytes:
             """Return one frame of PCM audio as bytes (for testing).
