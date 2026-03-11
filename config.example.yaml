@@ -1,0 +1,32 @@
+mode: marine  # or "test" for LPD433
+
+sdr:
+  device: "hackrf"
+  sample_rate: 8000000  # 8 Msps for marine, 2 Msps for test
+  gain_lna: 32
+  gain_vga: 30
+  gain_amp: false
+
+sip:
+  registrar: "sip:pbx.example.com"
+  transport: tls
+  srtp: required
+  verify_certs: false
+  extensions:
+    - username: "sip2sdr-1"
+      password: "secret1"
+      default_channel: 67
+    - username: "sip2sdr-2"
+      password: "secret2"
+      default_channel: 67
+    - username: "sip2sdr-3"
+      password: "secret3"
+      default_channel: 67
+    - username: "sip2sdr-4"
+      password: "secret4"
+      default_channel: 67
+
+audio:
+  codec: pcmu
+  sample_rate: 8000
+  buffer_size: 4000  # samples (~0.5s)
