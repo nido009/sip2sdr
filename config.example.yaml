@@ -6,6 +6,7 @@ sdr:
   gain_lna: 32
   gain_vga: 30
   gain_amp: false
+  squelch_threshold_db: -20  # dB; -40 sensitive, -20 moderate, -10 aggressive
 
 sip:
   registrar: "sip:pbx.example.com"
