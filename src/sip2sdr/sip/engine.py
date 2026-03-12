@@ -2,11 +2,15 @@
 
 Creates one SIP account per configured extension, registers with the
 Asterisk PBX, and wires incoming calls to the audio bridge.
+
+Each account tracks observable state (call status, current channel,
+DTMF history) accessible via ``get_account_states()``.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 
 import pjsua2 as pj
@@ -23,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 _SAMPLES_PER_FRAME = 160    # 20 ms at 8000 Hz
 _TTS_BUF_CAPACITY  = 16_000  # 2 s at 8000 Hz — enough for any announcement
+_DTMF_HISTORY_MAX  = 20     # keep at most this many entries per account
 
 
 class _Sip2SdrCall(pj.Call):
@@ -36,6 +41,10 @@ class _Sip2SdrCall(pj.Call):
         retune_fn: Callable[[int], None],
         mode: ChannelMode,
         default_channel: int,
+        on_call_started_fn: Callable[[str], None],
+        on_call_ended_fn: Callable[[], None],
+        dtmf_event_fn: Callable[[str], None],
+        channel_switch_fn: Callable[[int], None],
         call_id: int = pj.PJSUA_INVALID_ID,
     ) -> None:
         super().__init__(account, call_id)
@@ -47,8 +56,12 @@ class _Sip2SdrCall(pj.Call):
             mode=mode,
             retune_fn=retune_fn,
             announce_fn=self._announce,
+            dtmf_event_fn=dtmf_event_fn,
+            channel_switch_fn=channel_switch_fn,
         )
         self._default_channel = default_channel
+        self._on_call_started_fn = on_call_started_fn
+        self._on_call_ended_fn = on_call_ended_fn
 
     def onCallState(self, prm: pj.OnCallStateParam) -> None:  # type: ignore[override]
         """Handle call state transitions.
@@ -59,7 +72,7 @@ class _Sip2SdrCall(pj.Call):
         info = self.getInfo()
         logger.info("Call state: %s", info.stateText)
         if info.state == pj.PJSIP_INV_STATE_CONFIRMED:
-            self._start_audio()
+            self._start_audio(info.remoteUri)
         elif info.state == pj.PJSIP_INV_STATE_DISCONNECTED:
             self._stop_audio()
 
@@ -72,7 +85,7 @@ class _Sip2SdrCall(pj.Call):
         logger.debug("DTMF: %s", prm.digit)
         self._handler.on_dtmf(prm.digit)
 
-    def _start_audio(self) -> None:
+    def _start_audio(self, remote_uri: str) -> None:
         self._port = RingBufferMediaPort(
             sdr_buf=self._sdr_buf,
             tts_buf=self._tts_buf,
@@ -81,6 +94,7 @@ class _Sip2SdrCall(pj.Call):
         )
         aud_med = self.getAudioMedia(-1)
         self._port.startTransmit(aud_med)
+        self._on_call_started_fn(remote_uri)
         self._announce(f"Channel {self._default_channel}")
         logger.info("Audio streaming started")
 
@@ -92,6 +106,7 @@ class _Sip2SdrCall(pj.Call):
                 # Media may already be invalid in DISCONNECTED state
                 logger.debug("Media already torn down during _stop_audio")
             self._port = None
+        self._on_call_ended_fn()
         logger.info("Audio streaming stopped")
 
     def _announce(self, text: str) -> None:
@@ -106,7 +121,7 @@ class _Sip2SdrCall(pj.Call):
 
 
 class _Sip2SdrAccount(pj.Account):
-    """A registered SIP account that auto-answers calls."""
+    """A registered SIP account that auto-answers calls and tracks observable state."""
 
     def __init__(
         self,
@@ -124,6 +139,13 @@ class _Sip2SdrAccount(pj.Account):
         self._default_channel = default_channel
         self._active_call: _Sip2SdrCall | None = None
 
+        # Observable state
+        self._is_in_call: bool = False
+        self._remote_uri: str = ""
+        self._call_start_time: float | None = None
+        self._current_channel: int = default_channel
+        self._dtmf_history: list[tuple[str, float]] = []
+
     def onIncomingCall(self, prm: pj.OnIncomingCallParam) -> None:  # type: ignore[override]
         """Auto-answer an incoming call and start audio streaming.
 
@@ -138,12 +160,56 @@ class _Sip2SdrAccount(pj.Account):
             retune_fn=self._retune_fn,
             mode=self._mode,
             default_channel=self._default_channel,
+            on_call_started_fn=self._on_call_started,
+            on_call_ended_fn=self._on_call_ended,
+            dtmf_event_fn=self._record_dtmf,
+            channel_switch_fn=self._on_channel_switch,
             call_id=prm.callId,
         )
         self._active_call = call
         answer_prm = pj.CallOpParam()
         answer_prm.statusCode = pj.PJSIP_SC_OK
         call.answer(answer_prm)
+
+    def get_state(self) -> dict:
+        """Return current observable state for this account.
+
+        Returns:
+            Dict with keys: ``is_in_call``, ``remote_uri``,
+            ``call_duration_s``, ``current_channel``, ``dtmf_history``.
+        """
+        duration = (
+            time.time() - self._call_start_time
+            if self._call_start_time is not None
+            else 0.0
+        )
+        return {
+            "is_in_call": self._is_in_call,
+            "remote_uri": self._remote_uri,
+            "call_duration_s": duration,
+            "current_channel": self._current_channel,
+            "dtmf_history": list(self._dtmf_history),
+        }
+
+    def _on_call_started(self, remote_uri: str) -> None:
+        self._is_in_call = True
+        self._remote_uri = remote_uri
+        self._call_start_time = time.time()
+        self._current_channel = self._default_channel
+
+    def _on_call_ended(self) -> None:
+        self._is_in_call = False
+        self._remote_uri = ""
+        self._call_start_time = None
+        self._active_call = None
+
+    def _record_dtmf(self, digit: str) -> None:
+        self._dtmf_history.append((digit, time.time()))
+        if len(self._dtmf_history) > _DTMF_HISTORY_MAX:
+            self._dtmf_history = self._dtmf_history[-_DTMF_HISTORY_MAX:]
+
+    def _on_channel_switch(self, channel: int) -> None:
+        self._current_channel = channel
 
 
 class SipEngine:
@@ -180,6 +246,16 @@ class SipEngine:
     def num_extensions(self) -> int:
         """Number of SIP extensions configured."""
         return len(self._sip_config.extensions)
+
+    def get_account_states(self) -> list[dict]:
+        """Return current observable state for all SIP accounts.
+
+        Returns:
+            List of dicts (one per account), each containing:
+            ``is_in_call``, ``remote_uri``, ``call_duration_s``,
+            ``current_channel``, ``dtmf_history``.
+        """
+        return [acc.get_state() for acc in self._accounts]
 
     def start(self) -> None:
         """Initialise PJSUA2, configure codecs, create TLS transport, register accounts."""

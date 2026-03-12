@@ -2,8 +2,8 @@
 
 Instantiates the HackRF source and up to 4 NFM demodulator chains
 (xlat → NFM → squelch → resamp → ring buffer), connects them within a
-single top block, and provides a ``retune`` method for live channel
-switching.
+single top block, and provides ``retune``, ``set_squelch_threshold``, and
+``get_channel_states`` methods for live control and observability.
 """
 
 from __future__ import annotations
@@ -89,6 +89,8 @@ class SdrFlowgraph(gr.top_block):
             self.connect(chain.nfm_block, chain.squelch_block)
             self.connect(chain.squelch_block, chain.resamp_block)
             self.connect(chain.resamp_block, chain.sink_block)
+            # Parallel probe tap: nfm_block → probe_block (does not affect audio path)
+            self.connect(chain.nfm_block, chain.probe_block)
             logger.info("Chain %d: channel %d (%.3f MHz)", i, ch, freq / 1e6)
 
     @property
@@ -100,6 +102,35 @@ class SdrFlowgraph(gr.top_block):
     def chains(self) -> list[DemodChain]:
         """The 4 demodulator chains."""
         return self._chains
+
+    def get_channel_states(self) -> list[dict]:
+        """Return current observability state for all demodulator chains.
+
+        Returns:
+            List of dicts (one per chain), each containing:
+            - ``signal_level_db``: Signal power in dBFS (float).
+            - ``squelch_open``: True if squelch is open / signal passes (bool).
+            - ``squelch_threshold_db``: Current squelch threshold (float).
+            - ``channel_offset_hz``: Frequency offset from SDR centre (float).
+        """
+        return [
+            {
+                "signal_level_db": chain.signal_level,
+                "squelch_open": chain.squelch_open,
+                "squelch_threshold_db": chain.squelch_threshold,
+                "channel_offset_hz": chain.center_freq_offset,
+            }
+            for chain in self._chains
+        ]
+
+    def set_squelch_threshold(self, chain_index: int, threshold_db: float) -> None:
+        """Set the squelch threshold for one demodulator chain.
+
+        Args:
+            chain_index: 0-based index of the chain (0–3).
+            threshold_db: New threshold in dB. More negative = more sensitive.
+        """
+        self._chains[chain_index].set_squelch_threshold(threshold_db)
 
     def retune(self, chain_index: int, channel: int) -> None:
         """Retune one demodulator chain to a new channel.

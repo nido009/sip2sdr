@@ -7,6 +7,9 @@ Each chain consists of:
 4. Rational resampler — converts to 8000 Hz
 5. Ring buffer sink — writes PCM samples for the SIP layer to consume
 
+A parallel ``probe_avg_mag_sqrd_f`` block taps the NFM output to expose
+signal power for monitoring without disrupting the audio path.
+
 The chain is designed to be embedded in a GNU Radio top block; it does
 not own its own flowgraph.
 """
@@ -14,7 +17,7 @@ not own its own flowgraph.
 from __future__ import annotations
 
 import logging
-from math import gcd
+from math import gcd, log10
 
 import numpy as np
 from gnuradio import analog, gr
@@ -27,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _OUTPUT_RATE = 8_000   # Hz — PCMU sample rate
 _CHANNEL_RATE = 50_000  # Hz — intermediate rate after freq_xlat decimation
+_PROBE_ALPHA = 0.0001   # IIR decay constant for power probe (very slow averaging)
 
 
 class _RingBufferSink(gr.sync_block):
@@ -107,6 +111,9 @@ class DemodChain:
 
         self._squelch = analog.pwr_squelch_ff(squelch_threshold_db)
 
+        # Parallel power probe — tapped from NFM output, does not affect signal path.
+        self._probe = analog.probe_avg_mag_sqrd_f(_PROBE_ALPHA)
+
         g = gcd(channel_rate, _OUTPUT_RATE)
         interp = _OUTPUT_RATE // g
         decim = channel_rate // g
@@ -143,9 +150,34 @@ class DemodChain:
         return self._squelch
 
     @property
+    def probe_block(self) -> analog.probe_avg_mag_sqrd_f:
+        """The power probe block (connected in parallel from NFM output)."""
+        return self._probe
+
+    @property
     def resamp_block(self) -> grfilter.rational_resampler_fff:
         """The rational resampler block."""
         return self._resamp
+
+    @property
+    def signal_level(self) -> float:
+        """Current signal power in dBFS (from the power probe block).
+
+        Returns a float in the range roughly -300 to 0. Will read near -300 dBFS
+        when the flowgraph is not running or no signal is present.
+        """
+        linear = self._probe.level()
+        return 10.0 * log10(max(linear, 1e-30))
+
+    @property
+    def squelch_open(self) -> bool:
+        """True if the squelch is currently open (signal passes through)."""
+        return bool(self._squelch.unmuted())
+
+    @property
+    def squelch_threshold(self) -> float:
+        """Current squelch threshold in dB."""
+        return float(self._squelch.threshold())
 
     def retune(self, new_offset: float) -> None:
         """Update the channel centre frequency offset without stopping the flowgraph.

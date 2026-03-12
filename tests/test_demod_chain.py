@@ -75,3 +75,47 @@ class TestDemodChain:
         )
         chain.set_squelch_threshold(-35.0)
         assert chain.squelch_block.threshold() == pytest.approx(-35.0)
+
+    def test_probe_block_present(self) -> None:
+        from gnuradio import analog
+        buf = RingBuffer(capacity=4000)
+        chain = DemodChain(
+            center_freq_offset=0.0,
+            sdr_sample_rate=8_000_000,
+            channel_bandwidth=12_500,
+            buf=buf,
+        )
+        assert chain.probe_block is not None
+        assert isinstance(chain.probe_block, analog.probe_avg_mag_sqrd_f)
+
+    def test_signal_level_returns_float(self) -> None:
+        buf = RingBuffer(capacity=4000)
+        chain = DemodChain(
+            center_freq_offset=0.0,
+            sdr_sample_rate=8_000_000,
+            channel_bandwidth=12_500,
+            buf=buf,
+        )
+        level = chain.signal_level
+        assert isinstance(level, float)
+
+    def test_squelch_open_returns_bool(self) -> None:
+        buf = RingBuffer(capacity=4000)
+        chain = DemodChain(
+            center_freq_offset=0.0,
+            sdr_sample_rate=8_000_000,
+            channel_bandwidth=12_500,
+            buf=buf,
+        )
+        assert isinstance(chain.squelch_open, bool)
+
+    def test_squelch_threshold_property(self) -> None:
+        buf = RingBuffer(capacity=4000)
+        chain = DemodChain(
+            center_freq_offset=0.0,
+            sdr_sample_rate=8_000_000,
+            channel_bandwidth=12_500,
+            buf=buf,
+            squelch_threshold_db=-30.0,
+        )
+        assert chain.squelch_threshold == pytest.approx(-30.0)
