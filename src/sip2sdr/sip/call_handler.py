@@ -3,7 +3,9 @@
 ``DtmfCollector`` accumulates DTMF digits until a ``#`` terminator is
 received, then returns the parsed channel number.
 
-``ChannelSwitchHandler`` orchestrates validation and retuning.
+``ChannelSwitchHandler`` orchestrates validation and retuning, and
+optionally notifies observers of each raw DTMF digit and successful
+channel switches.
 """
 
 from __future__ import annotations
@@ -63,6 +65,10 @@ class ChannelSwitchHandler:
         mode: Operating mode (determines valid channel range).
         retune_fn: Callable invoked with the new channel number when valid.
         announce_fn: Callable invoked with an announcement text string.
+        dtmf_event_fn: Optional callback invoked with every raw DTMF digit
+            received (for observability / history tracking).
+        channel_switch_fn: Optional callback invoked with the new channel
+            number after a successful channel switch.
     """
 
     def __init__(
@@ -70,10 +76,14 @@ class ChannelSwitchHandler:
         mode: ChannelMode,
         retune_fn: Callable[[int], None],
         announce_fn: Callable[[str], None],
+        dtmf_event_fn: Callable[[str], None] | None = None,
+        channel_switch_fn: Callable[[int], None] | None = None,
     ) -> None:
         self._mode = mode
         self._retune = retune_fn
         self._announce = announce_fn
+        self._dtmf_event_fn = dtmf_event_fn
+        self._channel_switch_fn = channel_switch_fn
         self._collector = DtmfCollector()
 
     def on_dtmf(self, digit: str) -> None:
@@ -82,6 +92,8 @@ class ChannelSwitchHandler:
         Args:
             digit: The received DTMF character.
         """
+        if self._dtmf_event_fn is not None:
+            self._dtmf_event_fn(digit)
         result = self._collector.push(digit)
         if result is None:
             return
@@ -89,6 +101,8 @@ class ChannelSwitchHandler:
             logger.info("Switching to channel %d", result)
             self._retune(result)
             self._announce(f"Channel {result}")
+            if self._channel_switch_fn is not None:
+                self._channel_switch_fn(result)
         else:
             logger.warning("Invalid channel requested: %d", result)
             self._announce("Invalid channel")

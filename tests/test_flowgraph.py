@@ -55,6 +55,47 @@ class TestSdrFlowgraph:
         for chain in fg.chains:
             assert chain.squelch_block is not None
 
+    def test_get_channel_states(self) -> None:
+        buffers = [RingBuffer(4000) for _ in range(4)]
+        fg = SdrFlowgraph(
+            mode=ChannelMode.TEST,
+            sdr_device_args="hackrf=0",
+            sample_rate=2_000_000,
+            gain_lna=32,
+            gain_vga=30,
+            gain_amp=False,
+            initial_channels=[1, 2, 3, 4],
+            buffers=buffers,
+        )
+        states = fg.get_channel_states()
+        assert len(states) == 4
+        for state in states:
+            assert "signal_level_db" in state
+            assert "squelch_open" in state
+            assert "squelch_threshold_db" in state
+            assert "channel_offset_hz" in state
+            assert isinstance(state["signal_level_db"], float)
+            assert isinstance(state["squelch_open"], bool)
+            assert isinstance(state["squelch_threshold_db"], float)
+            assert isinstance(state["channel_offset_hz"], float)
+
+    def test_set_squelch_threshold_on_flowgraph(self) -> None:
+        buffers = [RingBuffer(4000) for _ in range(4)]
+        fg = SdrFlowgraph(
+            mode=ChannelMode.TEST,
+            sdr_device_args="hackrf=0",
+            sample_rate=2_000_000,
+            gain_lna=32,
+            gain_vga=30,
+            gain_amp=False,
+            initial_channels=[1, 1, 1, 1],
+            buffers=buffers,
+            squelch_threshold_db=-20.0,
+        )
+        fg.set_squelch_threshold(0, -40.0)
+        assert fg.chains[0].squelch_threshold == pytest.approx(-40.0)
+        assert fg.chains[1].squelch_threshold == pytest.approx(-20.0)
+
     def test_retune_channel(self) -> None:
         buffers = [RingBuffer(4000) for _ in range(4)]
         fg = SdrFlowgraph(

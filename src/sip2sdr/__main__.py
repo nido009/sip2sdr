@@ -16,6 +16,7 @@ from sip2sdr.config import load_config
 from sip2sdr.sdr.flowgraph import SdrFlowgraph
 from sip2sdr.sip.engine import SipEngine
 from sip2sdr.utils.logging import configure_logging
+from sip2sdr.web.server import DebugWebServer
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,15 @@ def main() -> None:
         mode=cfg.mode,
     )
 
+    web: DebugWebServer | None = None
+    if cfg.web.enabled:
+        web = DebugWebServer(flowgraph=fg, sip_engine=sip, port=cfg.web.port)
+
     fg.start()
     sip.start()
+    if web is not None:
+        web.start()
+        logger.info("Debug dashboard: http://0.0.0.0:%d/", cfg.web.port)
     logger.info("SIP2SDR running — press Ctrl+C to stop")
 
     stop_event = [False]
@@ -83,6 +91,8 @@ def main() -> None:
         time.sleep(0.5)
 
     logger.info("Shutting down…")
+    if web is not None:
+        web.stop()
     sip.stop()
     fg.stop()
     fg.wait()

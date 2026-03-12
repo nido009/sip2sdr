@@ -79,6 +79,29 @@ class TestLoadConfig:
         assert cfg.sdr.squelch_threshold_db == pytest.approx(-30.0)
 
 
+class TestWebConfig:
+    def test_web_defaults_when_absent(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.web.enabled is True
+        assert cfg.web.port == 8080
+
+    def test_web_port_custom(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        marine_config_dict["web"] = {"port": 9090}
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.web.port == 9090
+
+    def test_web_enabled_false(self, tmp_path: Path, marine_config_dict: dict) -> None:
+        marine_config_dict["web"] = {"enabled": False}
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(yaml.dump(marine_config_dict))
+        cfg = load_config(cfg_file)
+        assert cfg.web.enabled is False
+
+
 class TestCodecConfig:
     def test_pcmu_parsed(self, tmp_path: Path, marine_config_dict: dict) -> None:
         from sip2sdr.codec import Codec

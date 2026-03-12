@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIP2SDR MONITOR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #060a12;
+    --bg2:       #0d1524;
+    --bg3:       #111d30;
+    --border:    #1a3050;
+    --amber:     #f59e0b;
+    --amber-dim: #92600a;
+    --cyan:      #22d3ee;
+    --green:     #22c55e;
+    --red:       #ef4444;
+    --muted:     #4a6080;
+    --text:      #c8d8e8;
+    --text-dim:  #607080;
+    --scan:      rgba(255,255,255,0.015);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      var(--scan) 2px,
+      var(--scan) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: 'Orbitron', monospace;
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: 4px;
+    color: var(--amber);
+    text-shadow: 0 0 20px rgba(245,158,11,0.5);
+  }
+
+  .logo span {
+    color: var(--cyan);
+    text-shadow: 0 0 20px rgba(34,211,238,0.5);
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+
+  .ws-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .ws-dot.connected   { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .ws-dot.connecting  { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: pulse 1s ease-in-out infinite; }
+  .ws-dot.disconnected{ background: var(--red);   box-shadow: 0 0 8px var(--red); }
+
+  .clock {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--cyan);
+    opacity: 0.8;
+    min-width: 80px;
+    text-align: right;
+  }
+
+  /* ── Grid ── */
+  main {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 53px);
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    animation: fadeIn 0.4s ease both;
+  }
+
+  .card:nth-child(2) { animation-delay: 0.05s; }
+  .card:nth-child(3) { animation-delay: 0.10s; }
+  .card:nth-child(4) { animation-delay: 0.15s; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+
+  .card-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--muted);
+  }
+
+  .call-badge {
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    font-family: 'Orbitron', monospace;
+    transition: all 0.3s;
+    text-transform: uppercase;
+  }
+
+  .call-badge.idle    { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .call-badge.in-call { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.4);
+                        box-shadow: 0 0 12px rgba(34,197,94,0.2); }
+
+  .card-body {
+    padding: 14px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ── Section label ── */
+  .section-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  /* ── Channel info ── */
+  .channel-info {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .channel-number {
+    font-family: 'Orbitron', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--amber);
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(245,158,11,0.4);
+    transition: all 0.3s;
+  }
+
+  .channel-freq {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* ── Signal meter ── */
+  .signal-section {}
+
+  .signal-meter-wrap {
+    position: relative;
+    height: 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .signal-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #1a4a20, #22c55e 60%, #f59e0b 85%, #ef4444);
+    transition: width 0.2s ease;
+    border-radius: 1px;
+  }
+
+  .signal-ticks {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 0 2px 2px;
+    pointer-events: none;
+  }
+
+  .signal-ticks span {
+    font-size: 8px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 0;
+  }
+
+  .signal-value-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 5px;
+  }
+
+  .signal-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    transition: color 0.3s;
+  }
+
+  /* ── Squelch ── */
+  .squelch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .squelch-pill {
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-family: 'Orbitron', monospace;
+    transition: all 0.3s;
+  }
+  .squelch-pill.open   { background: rgba(34,211,238,0.15); color: var(--cyan); border: 1px solid rgba(34,211,238,0.4); box-shadow: 0 0 10px rgba(34,211,238,0.15); }
+  .squelch-pill.closed { background: rgba(74,96,128,0.15);  color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── Squelch threshold slider ── */
+  .slider-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--amber);
+    border-radius: 2px;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(245,158,11,0.6);
+    transition: box-shadow 0.2s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 12px rgba(245,158,11,0.9);
+  }
+
+  .slider-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 12px;
+    color: var(--amber);
+    min-width: 52px;
+    text-align: right;
+    letter-spacing: 1px;
+  }
+
+  /* ── Call info ── */
+  .call-info {
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--bg2);
+    padding: 8px 10px;
+  }
+
+  .call-info.inactive { opacity: 0.4; }
+
+  .call-remote {
+    font-size: 10px;
+    color: var(--cyan);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .call-duration {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: var(--green);
+    letter-spacing: 3px;
+    margin-top: 4px;
+  }
+
+  .call-duration.inactive { color: var(--muted); }
+
+  /* ── DTMF history ── */
+  .dtmf-history {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 8px 10px;
+    min-height: 40px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dtmf-digits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    align-content: flex-start;
+  }
+
+  .dtmf-digit {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(245,158,11,0.1);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 2px;
+    color: var(--amber);
+    animation: dtmfIn 0.2s ease;
+  }
+
+  .dtmf-empty {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Retune control ── */
+  .retune-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  input[type=number].ch-input {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input[type=number].ch-input:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.2);
+  }
+  input[type=number].ch-input::placeholder { color: var(--muted); }
+  /* Hide number spinners */
+  input[type=number].ch-input::-webkit-inner-spin-button,
+  input[type=number].ch-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .retune-btn {
+    background: transparent;
+    border: 1px solid var(--amber-dim);
+    border-radius: 2px;
+    color: var(--amber);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .retune-btn:hover {
+    background: rgba(245,158,11,0.1);
+    border-color: var(--amber);
+    box-shadow: 0 0 10px rgba(245,158,11,0.2);
+  }
+  .retune-btn:active { transform: scale(0.97); }
+
+  /* ── Footer / status bar ── */
+  footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 24px;
+    z-index: 10;
+  }
+
+  .footer-item {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .footer-item strong { color: var(--text); font-weight: normal; }
+
+  /* ── Divider ── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0 -14px;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  @keyframes dtmfIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  /* ── Responsive (2 columns on narrow) ── */
+  @media (max-width: 900px) {
+    main { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  /* Add bottom padding for fixed footer */
+  .card:last-child .card-body { padding-bottom: 38px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SIP<span>2</span>SDR <span style="color:var(--muted);font-size:12px;letter-spacing:2px;">MONITOR</span></div>
+  <div class="header-meta">
+    <div class="ws-status">
+      <div class="ws-dot connecting" id="ws-dot"></div>
+      <span id="ws-label">CONNECTING</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main id="grid">
+  <!-- Cards injected by JS -->
+</main>
+
+<footer>
+  <div class="footer-item">SIP2SDR DEBUG CONSOLE</div>
+  <div class="footer-item">LAST UPDATE: <strong id="last-update">—</strong></div>
+  <div class="footer-item">CLIENTS: <strong id="client-count">—</strong></div>
+</footer>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────
+
+function fmtDuration(seconds) {
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function fmtDb(db) {
+  return db.toFixed(1) + ' dB';
+}
+
+// Map dB (-80..0) → bar width percent (0..100)
+function dbToPercent(db) {
+  const min = -80, max = 0;
+  return Math.max(0, Math.min(100, ((db - min) / (max - min)) * 100));
+}
+
+// Map channel offset Hz + mode center to approximate frequency
+// (we show raw offset if we don't know the mode center)
+function offsetToFreqStr(offsetHz) {
+  return (offsetHz / 1e6).toFixed(3) + ' MHz off';
+}
+
+// ── Card rendering ─────────────────────────────────────────────────────
+
+function initCards(count) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    grid.insertAdjacentHTML('beforeend', cardHtml(i));
+  }
+  // Attach slider listeners
+  document.querySelectorAll('.squelch-slider').forEach(slider => {
+    const idx = parseInt(slider.dataset.idx);
+    const valEl = document.getElementById(`sq-val-${idx}`);
+    slider.addEventListener('input', () => {
+      valEl.textContent = parseFloat(slider.value).toFixed(1) + ' dB';
+    });
+    slider.addEventListener('change', () => {
+      postJson('/api/squelch', { channel_idx: idx, threshold_db: parseFloat(slider.value) })
+        .catch(e => console.warn('squelch error', e));
+    });
+  });
+  // Attach retune buttons
+  document.querySelectorAll('.retune-btn').forEach(btn => {
+    const idx = parseInt(btn.dataset.idx);
+    btn.addEventListener('click', () => {
+      const input = document.getElementById(`retune-input-${idx}`);
+      const ch = parseInt(input.value);
+      if (isNaN(ch) || ch < 1) return;
+      postJson('/api/retune', { channel_idx: idx, channel_number: ch })
+        .then(() => { input.value = ''; })
+        .catch(e => console.warn('retune error', e));
+    });
+    // Allow Enter key
+    document.getElementById(`retune-input-${idx}`).addEventListener('keydown', e => {
+      if (e.key === 'Enter') btn.click();
+    });
+  });
+}
+
+function cardHtml(i) {
+  return `
+  <div class="card" id="card-${i}">
+    <div class="card-header">
+      <div class="card-title">CH ${i+1}</div>
+      <div class="call-badge idle" id="call-badge-${i}">IDLE</div>
+    </div>
+    <div class="card-body">
+
+      <!-- Channel info -->
+      <div>
+        <div class="section-label">TUNED CHANNEL</div>
+        <div class="channel-info">
+          <div class="channel-number" id="ch-num-${i}">—</div>
+          <div class="channel-freq" id="ch-freq-${i}">—</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Signal level -->
+      <div class="signal-section">
+        <div class="section-label">SIGNAL POWER</div>
+        <div class="signal-meter-wrap">
+          <div class="signal-bar" id="sig-bar-${i}"></div>
+        </div>
+        <div class="signal-value-row">
+          <div class="signal-value" id="sig-val-${i}" style="color:var(--muted)">— dBFS</div>
+          <div class="squelch-pill closed" id="sq-pill-${i}">CLOSED</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Squelch threshold -->
+      <div class="slider-wrap">
+        <div class="section-label">SQUELCH THRESHOLD</div>
+        <div class="slider-row">
+          <input type="range" class="squelch-slider" id="sq-slider-${i}" data-idx="${i}"
+            min="-80" max="0" step="0.5" value="-20">
+          <div class="slider-val" id="sq-val-${i}">-20.0 dB</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Call info -->
+      <div>
+        <div class="section-label">CALL</div>
+        <div class="call-info inactive" id="call-info-${i}">
+          <div class="call-remote" id="call-remote-${i}">NO ACTIVE CALL</div>
+          <div class="call-duration inactive" id="call-dur-${i}">--:--</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- DTMF history -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="section-label">DTMF HISTORY</div>
+        <div class="dtmf-history" id="dtmf-${i}">
+          <div class="dtmf-empty">NO INPUT</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Retune control -->
+      <div>
+        <div class="section-label">RETUNE</div>
+        <div class="retune-row">
+          <input type="number" class="ch-input" id="retune-input-${i}" placeholder="CH #" min="1" max="88">
+          <button class="retune-btn" data-idx="${i}">TUNE</button>
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+// ── State update ────────────────────────────────────────────────────────
+
+let cardCount = 0;
+
+function applyState(state) {
+  const { channels, accounts } = state;
+  const n = Math.min(channels.length, accounts.length);
+
+  if (n !== cardCount) {
+    initCards(n);
+    cardCount = n;
+  }
+
+  for (let i = 0; i < n; i++) {
+    updateChannel(i, channels[i]);
+    updateAccount(i, accounts[i]);
+  }
+
+  const now = new Date();
+  document.getElementById('last-update').textContent =
+    now.toTimeString().slice(0, 8);
+}
+
+function updateChannel(i, ch) {
+  // Signal bar
+  const pct = dbToPercent(ch.signal_level_db);
+  document.getElementById(`sig-bar-${i}`).style.width = pct + '%';
+
+  // Signal value colour
+  const sigEl = document.getElementById(`sig-val-${i}`);
+  sigEl.textContent = fmtDb(ch.signal_level_db);
+  if (ch.signal_level_db > -30) sigEl.style.color = 'var(--amber)';
+  else if (ch.signal_level_db > -60) sigEl.style.color = 'var(--text)';
+  else sigEl.style.color = 'var(--muted)';
+
+  // Squelch pill
+  const pill = document.getElementById(`sq-pill-${i}`);
+  if (ch.squelch_open) {
+    pill.className = 'squelch-pill open';
+    pill.textContent = 'OPEN';
+  } else {
+    pill.className = 'squelch-pill closed';
+    pill.textContent = 'CLOSED';
+  }
+
+  // Slider sync (only if user isn't dragging)
+  const slider = document.getElementById(`sq-slider-${i}`);
+  const valEl  = document.getElementById(`sq-val-${i}`);
+  if (document.activeElement !== slider) {
+    slider.value = ch.squelch_threshold_db.toFixed(1);
+    valEl.textContent = ch.squelch_threshold_db.toFixed(1) + ' dB';
+  }
+
+  // Frequency offset
+  document.getElementById(`ch-freq-${i}`).textContent =
+    offsetToFreqStr(ch.channel_offset_hz);
+}
+
+function updateAccount(i, acc) {
+  // Channel number
+  document.getElementById(`ch-num-${i}`).textContent = acc.current_channel;
+
+  // Call badge
+  const badge = document.getElementById(`call-badge-${i}`);
+  const callInfo = document.getElementById(`call-info-${i}`);
+  const callRemote = document.getElementById(`call-remote-${i}`);
+  const callDur = document.getElementById(`call-dur-${i}`);
+
+  if (acc.is_in_call) {
+    badge.className = 'call-badge in-call';
+    badge.textContent = 'IN CALL';
+    callInfo.className = 'call-info';
+    callRemote.textContent = acc.remote_uri || 'UNKNOWN CALLER';
+    callDur.className = 'call-duration';
+    callDur.textContent = fmtDuration(acc.call_duration_s);
+  } else {
+    badge.className = 'call-badge idle';
+    badge.textContent = 'IDLE';
+    callInfo.className = 'call-info inactive';
+    callRemote.textContent = 'NO ACTIVE CALL';
+    callDur.className = 'call-duration inactive';
+    callDur.textContent = '--:--';
+  }
+
+  // DTMF history
+  const dtmfEl = document.getElementById(`dtmf-${i}`);
+  const history = acc.dtmf_history || [];
+  if (history.length === 0) {
+    dtmfEl.innerHTML = '<div class="dtmf-empty">NO INPUT</div>';
+  } else {
+    // history items are [digit, timestamp] pairs
+    const digits = history.map(entry => {
+      const digit = Array.isArray(entry) ? entry[0] : entry;
+      return `<div class="dtmf-digit">${digit}</div>`;
+    });
+    dtmfEl.innerHTML = '<div class="dtmf-digits">' + digits.join('') + '</div>';
+  }
+}
+
+// ── REST helpers ────────────────────────────────────────────────────────
+
+function postJson(url, data) {
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; });
+}
+
+// ── WebSocket connection with auto-reconnect ────────────────────────────
+
+let ws = null;
+let reconnectDelay = 500;
+const MAX_RECONNECT = 16000;
+
+function wsConnect() {
+  setWsState('connecting');
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    setWsState('connected');
+    reconnectDelay = 500;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const state = JSON.parse(event.data);
+      applyState(state);
+    } catch(e) {
+      console.warn('Bad JSON from server', e);
+    }
+  };
+
+  ws.onclose = () => {
+    setWsState('disconnected');
+    setTimeout(wsConnect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+function setWsState(state) {
+  const dot   = document.getElementById('ws-dot');
+  const label = document.getElementById('ws-label');
+  dot.className = `ws-dot ${state}`;
+  label.textContent = state.toUpperCase();
+}
+
+// ── Clock ───────────────────────────────────────────────────────────────
+
+function updateClock() {
+  document.getElementById('clock').textContent =
+    new Date().toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Boot ────────────────────────────────────────────────────────────────
+
+wsConnect();
+</script>
+</body>
+</html>

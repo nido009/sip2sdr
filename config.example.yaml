@@ -31,3 +31,7 @@ audio:
   codec: pcmu  # or "pcma" for G.711 A-law
   sample_rate: 8000
   buffer_size: 4000  # samples (~0.5s)
+
+web:
+  enabled: true   # set to false to disable the debug dashboard
+  port: 8080      # TCP port for the debug web interface

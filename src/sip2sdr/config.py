@@ -57,6 +57,14 @@ class AudioConfig:
 
 
 @dataclass(frozen=True)
+class WebConfig:
+    """Debug web interface configuration."""
+
+    enabled: bool = True
+    port: int = 8080
+
+
+@dataclass(frozen=True)
 class Config:
     """Top-level application configuration."""
 
@@ -64,6 +72,7 @@ class Config:
     sdr: SdrConfig
     sip: SipConfig
     audio: AudioConfig
+    web: WebConfig = WebConfig()
 
 
 def load_config(path: Path) -> Config:
@@ -129,4 +138,10 @@ def load_config(path: Path) -> Config:
         buffer_size=int(audio_raw["buffer_size"]),
     )
 
-    return Config(mode=mode, sdr=sdr, sip=sip, audio=audio)
+    web_raw = raw.get("web", {})
+    web = WebConfig(
+        enabled=bool(web_raw.get("enabled", True)),
+        port=int(web_raw.get("port", 8080)),
+    )
+
+    return Config(mode=mode, sdr=sdr, sip=sip, audio=audio, web=web)
