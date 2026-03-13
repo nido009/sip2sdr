@@ -336,6 +336,13 @@ class SipEngine:
             cfg.mediaConfig.srtpUse = pj.PJMEDIA_SRTP_MANDATORY
         cfg.mediaConfig.srtpSecureSignaling = 0
 
+        # NAT traversal: rewrite SDP connection address and Contact header
+        # with the public IP learned from the registrar response
+        cfg.natConfig.contactRewriteUse = 1   # rewrite Contact with public IP
+        cfg.natConfig.viaRewriteUse = 1       # rewrite Via with public IP
+        cfg.natConfig.sdpNatRewriteUse = 1    # rewrite SDP c= line with public IP
+        cfg.natConfig.sipOutboundUse = 1      # use RFC 5626 SIP outbound
+
         acc.create(cfg)
         self._accounts.append(acc)
         logger.info("Registered SIP account: %s", ext.username)

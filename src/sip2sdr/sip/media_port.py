@@ -88,8 +88,12 @@ try:
             Args:
                 frame: PJSUA2 MediaFrame to fill with audio data.
             """
-            samples = _read_frame(self._sdr_buf, self._tts_buf, self._samples_per_frame)
+            # frame.size is set by PJSUA2 to the expected number of bytes.
+            # Each sample is 2 bytes (int16), so derive sample count from frame.size.
+            n = frame.size // 2 if frame.size else self._samples_per_frame
+            samples = _read_frame(self._sdr_buf, self._tts_buf, n)
             raw = samples.tobytes()
+            frame.type = pj.PJMEDIA_FRAME_TYPE_AUDIO
             frame.buf.resize(len(raw))
             frame.buf[:] = list(raw)
 
