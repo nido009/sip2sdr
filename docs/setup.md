@@ -64,3 +64,53 @@ pytest tests/ -v
 # Pure-Python tests run without hardware.
 # GNU Radio / PJSUA2 tests are automatically skipped if those packages are absent.
 ```
+
+## Docker (Recommended for Production)
+
+Docker packages all system dependencies (GNU Radio, PJSUA2, espeak-ng) into a
+self-contained image. No system packages need to be installed manually.
+
+### Requirements
+
+- Linux host with Docker and docker-compose v2 installed
+- HackRF One connected via USB
+
+### One-Time Host Setup
+
+Install HackRF udev rules so the device is accessible inside the container:
+
+```bash
+sudo bash scripts/setup-host.sh
+```
+
+Unplug and replug the HackRF if it was already connected.
+
+### Configure
+
+```bash
+cp config.example.yaml config.yaml
+nano config.yaml   # fill in SIP credentials, SDR parameters
+```
+
+### Build and Start
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+The container restarts automatically on reboot.
+
+### Logs
+
+```bash
+docker compose logs -f
+```
+
+### Update
+
+```bash
+git pull
+docker compose build
+docker compose up -d
+```
