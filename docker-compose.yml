@@ -1,0 +1,9 @@
+services:
+  sip2sdr:
+    build: .
+    restart: unless-stopped
+    devices:
+      - /dev/bus/usb:/dev/bus/usb   # HackRF One USB passthrough
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    network_mode: host              # SIP/RTP need host network stack
