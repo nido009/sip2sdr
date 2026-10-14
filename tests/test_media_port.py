@@ -10,6 +10,19 @@ from sip2sdr.audio.ring_buffer import RingBuffer  # noqa: E402
 from sip2sdr.sip.media_port import RingBufferMediaPort  # noqa: E402
 
 
+@pytest.fixture(scope="module", autouse=True)
+def pj_endpoint():
+    """createPort() needs an initialised PJSUA lib; without it pjsua2 segfaults."""
+    ep = pjsua2.Endpoint()
+    ep.libCreate()
+    cfg = pjsua2.EpConfig()
+    cfg.logConfig.level = 1
+    cfg.uaConfig.threadCnt = 0
+    ep.libInit(cfg)
+    yield ep
+    ep.libDestroy()
+
+
 class TestRingBufferMediaPort:
     def test_construction(self) -> None:
         sdr_buf = RingBuffer(4000)
