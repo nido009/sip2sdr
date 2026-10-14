@@ -8,14 +8,20 @@ Tested on Ubuntu 26.04, Python 3.14, pjproject 2.17-dev, HackRF One. All steps a
 ```bash
 apt-get update
 apt-get install -y --no-install-recommends \
-    git build-essential pkg-config swig \
-    python3-dev python3-venv \
+    git curl build-essential pkg-config swig \
+    python3-dev \
     libssl-dev libopus-dev libasound2-dev uuid-dev \
     gnuradio gr-osmosdr hackrf libhackrf-dev \
     espeak-ng
 ```
 
 There is no distro package for pjsua2, so it is built from source in step 2.
+
+Install [uv](https://docs.astral.sh/uv/) (used for the venv and all Python packages):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
 ## 2. Build pjproject + Python bindings
 
@@ -43,15 +49,17 @@ git clone https://github.com/nido009/sip2sdr.git
 cd sip2sdr
 
 # --system-site-packages makes the apt-installed gnuradio / osmosdr importable.
-python3 -m venv --system-site-packages .venv
-.venv/bin/pip install -U pip
-.venv/bin/pip install -e '.[dev]'
+uv venv --system-site-packages --python /usr/bin/python3
+# --inexact keeps files we copy into the venv by hand (pjsua2, next step).
+uv sync --inexact
 ```
+
+`uv sync` installs sip2sdr (editable) plus the dev group, pinned by `uv.lock`.
 
 ## 4. Install pjsua2 into the venv
 
 ```bash
-SP=$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+SP=$(uv run python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
 B=/opt/pjproject/pjsip-apps/src/swig/python/build/lib.linux-x86_64-cpython-314
 cp "$B"/_pjsua2.*.so "$B"/pjsua2.py "$SP"/
 ```
@@ -74,9 +82,9 @@ hackrf_info
 ## 6. Verify
 
 ```bash
-.venv/bin/python -c "import pjsua2; print(pjsua2.Endpoint().libVersion().full)"
-.venv/bin/python -c "import gnuradio, osmosdr"
-.venv/bin/pytest
+uv run python -c "import pjsua2; print(pjsua2.Endpoint().libVersion().full)"
+uv run python -c "import gnuradio, osmosdr"
+uv run pytest
 ```
 
 All tests should pass with nothing skipped.
@@ -85,7 +93,7 @@ All tests should pass with nothing skipped.
 
 ```bash
 cp config.example.yaml config.yaml   # gitignored; set registrar, extensions, passwords
-.venv/bin/sip2sdr --help
+uv run sip2sdr --help
 ```
 
 ## Troubleshooting
