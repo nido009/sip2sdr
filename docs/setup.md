@@ -6,6 +6,8 @@
 - Python 3.10+
 - [HackRF One](https://greatscottgadgets.com/hackrf/) SDR hardware
 
+> Installing without Docker? Follow the full step-by-step guide in [bare-metal.md](bare-metal.md).
+
 ## System Package Dependencies
 
 Install the following system packages before creating the Python venv:
@@ -15,8 +17,8 @@ Install the following system packages before creating the Python venv:
 sudo apt install \
     gnuradio gr-osmosdr \
     libhackrf-dev hackrf \
-    espeak-ng \
-    libpjproject-dev python3-pjsua2
+    espeak-ng
+# pjsua2 has no distro package — build it from source, see docs/bare-metal.md
 
 # macOS (development only — GNU Radio via Homebrew, no HackRF)
 brew install gnuradio espeak-ng
