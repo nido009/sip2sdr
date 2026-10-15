@@ -3,23 +3,20 @@
 ## Starting the Application
 
 ```bash
-source .venv/bin/activate
-export PYTHONPATH=/usr/lib/python3/dist-packages:$PYTHONPATH
-
-sip2sdr config.yaml
+# GNU Radio comes from apt: the venv must be created with --system-site-packages
+# (see setup.md), otherwise export PYTHONPATH=/usr/lib/python3/dist-packages.
+uv run sip2sdr --config config.yaml
 # or
-python -m sip2sdr config.yaml
+uv run python -m sip2sdr --config config.yaml
 ```
 
 ### Command-Line Options
 
 ```
-usage: sip2sdr [-h] [--log-level LOG_LEVEL] config
-
-positional arguments:
-  config                Path to YAML config file
+usage: sip2sdr [-h] --config CONFIG [--log-level LOG_LEVEL]
 
 options:
+  --config CONFIG        Path to YAML config file
   --log-level LOG_LEVEL  Log level: DEBUG, INFO, WARNING (default: INFO)
 ```
 

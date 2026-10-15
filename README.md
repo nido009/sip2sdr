@@ -21,14 +21,12 @@ Listen to Marine VHF (or LPD433) radio channels via phone — a Python applicati
 sudo apt install gnuradio gr-osmosdr libhackrf-dev espeak-ng libpjproject-dev
 ```
 
-**Python (in a venv):**
+**Python (managed with [uv](https://docs.astral.sh/uv/)):**
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync
 ```
 
-**GNU Radio Python path** (add to `.venv/bin/activate` or your shell profile):
+**GNU Radio Python path** (only needed if the venv was not created with `--system-site-packages`):
 ```bash
 export PYTHONPATH=/usr/lib/python3/dist-packages:$PYTHONPATH
 ```
@@ -40,7 +38,7 @@ See [`docs/setup.md`](docs/setup.md) for full installation instructions.
 ```bash
 cp config.example.yaml config.yaml
 # edit config.yaml with your SIP credentials and SDR settings
-python -m sip2sdr --config config.yaml
+uv run sip2sdr --config config.yaml
 ```
 
 ## Configuration

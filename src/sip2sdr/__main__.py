@@ -23,10 +23,8 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Parse arguments and start the SIP2SDR application."""
-    parser = argparse.ArgumentParser(
-        description="SIP2SDR — stream Marine VHF radio to SIP callers"
-    )
-    parser.add_argument("config", help="Path to YAML config file")
+    parser = argparse.ArgumentParser(description="SIP2SDR — stream Marine VHF radio to SIP callers")
+    parser.add_argument("--config", required=True, help="Path to YAML config file")
     parser.add_argument("--log-level", default="INFO", help="Log level")
     args = parser.parse_args()
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=SIP2SDR gateway (SIP to HackRF)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+SupplementaryGroups=plugdev
+WorkingDirectory=/opt/sip2sdr
+StateDirectory=sip2sdr
+Environment=HOME=/var/lib/sip2sdr
+ExecStart=/opt/sip2sdr/.venv/bin/sip2sdr --config /opt/sip2sdr/config.yaml
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
