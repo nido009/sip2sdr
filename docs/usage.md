@@ -5,9 +5,9 @@
 ```bash
 # GNU Radio comes from apt: the venv must be created with --system-site-packages
 # (see setup.md), otherwise export PYTHONPATH=/usr/lib/python3/dist-packages.
-uv run sip2sdr config.yaml
+uv run sip2sdr --config config.yaml
 # or
-uv run python -m sip2sdr config.yaml
+uv run python -m sip2sdr --config config.yaml
 ```
 
 ### Command-Line Options

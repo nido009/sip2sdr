@@ -96,6 +96,21 @@ cp config.example.yaml config.yaml   # gitignored; set registrar, extensions, pa
 uv run sip2sdr --help
 ```
 
+## 8. Run as a systemd service
+
+```bash
+useradd --system --home-dir /opt/sip2sdr --shell /usr/sbin/nologin --groups plugdev sip2sdr
+chown root:sip2sdr config.yaml && chmod 640 config.yaml   # holds SIP passwords
+cp deploy/sip2sdr.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now sip2sdr
+journalctl -u sip2sdr -f
+```
+
+The unit runs `/opt/sip2sdr/.venv/bin/sip2sdr --config /opt/sip2sdr/config.yaml`; edit the paths if
+you installed elsewhere. The `sip2sdr` user must be able to read the repo and venv
+(world-readable by default under `/opt`).
+
 ## Troubleshooting
 
 - **`cannot open shared object file: libpjsua2.so`** — run `ldconfig`.
