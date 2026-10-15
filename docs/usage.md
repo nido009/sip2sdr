@@ -13,12 +13,10 @@ uv run python -m sip2sdr --config config.yaml
 ### Command-Line Options
 
 ```
-usage: sip2sdr [-h] [--log-level LOG_LEVEL] config
-
-positional arguments:
-  config                Path to YAML config file
+usage: sip2sdr [-h] --config CONFIG [--log-level LOG_LEVEL]
 
 options:
+  --config CONFIG        Path to YAML config file
   --log-level LOG_LEVEL  Log level: DEBUG, INFO, WARNING (default: INFO)
 ```
 
