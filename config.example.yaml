@@ -1,12 +1,17 @@
-mode: marine  # or "test" for LPD433
+mode: marine # or "test" for LPD433
 
 sdr:
   device: "hackrf"
-  sample_rate: 8000000  # 8 Msps for marine, 2 Msps for test
+  sample_rate: 8000000 # 8 Msps for marine, 2 Msps for test
   gain_lna: 32
   gain_vga: 30
   gain_amp: false
-  squelch_threshold_db: -20  # dB; -40 sensitive, -20 moderate, -10 aggressive
+  squelch_threshold_db: -20 # dB; -40 sensitive, -20 moderate, -10 aggressive
+# no-antenna setup:
+#gain_lna: 16
+#gain_vga: 20
+#gain_amp: false
+#squelch_threshold_db: -10
 
 sip:
   registrar: "sip:pbx.example.com"
@@ -14,24 +19,24 @@ sip:
   srtp: required
   verify_certs: false
   extensions:
-    - username: "sip2sdr-1"
-      password: "secret1"
-      default_channel: 67
-    - username: "sip2sdr-2"
-      password: "secret2"
-      default_channel: 67
-    - username: "sip2sdr-3"
-      password: "secret3"
-      default_channel: 67
-    - username: "sip2sdr-4"
-      password: "secret4"
-      default_channel: 67
+  - username: "sip2sdr-1"
+    password: "secret1"
+    default_channel: 67
+  - username: "sip2sdr-2"
+    password: "secret2"
+    default_channel: 67
+  - username: "sip2sdr-3"
+    password: "secret3"
+    default_channel: 67
+  - username: "sip2sdr-4"
+    password: "secret4"
+    default_channel: 67
 
 audio:
-  codec: pcmu  # or "pcma" for G.711 A-law
+  codec: pcmu # or "pcma" for G.711 A-law
   sample_rate: 8000
-  buffer_size: 4000  # samples (~0.5s)
+  buffer_size: 4000 # samples (~0.5s)
 
 web:
-  enabled: true   # set to false to disable the debug dashboard
-  port: 8080      # TCP port for the debug web interface
+  enabled: true # set to false to disable the debug dashboard
+  port: 8080 # TCP port for the debug web interface
